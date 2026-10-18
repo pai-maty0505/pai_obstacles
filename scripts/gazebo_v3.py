@@ -2,8 +2,8 @@
 """
 v3 の MLP が推論した軌道を、Gazebo（物理シミュレーション）で実際に動かす（2026-10-14）。
 
-v2（~/pai_obstacle_v2）の Gazebo の仕組みをそのまま使う：起動（scripts/sim_start.sh）、撮影・接触の記録
-（scripts/run_episode_recorded.sh）、字幕付きの動画（scripts/make_video.py）、アームとグリッパの動かし方
+v2 の Gazebo の仕組み（gazebo/ に入れてある）をそのまま使う：起動（gazebo/scripts/sim_start.sh）、撮影・接触の記録
+（gazebo/scripts/run_episode_recorded.sh）、字幕付きの動画（gazebo/scripts/make_video.py）、アームとグリッパの動かし方
 （run_mission.MissionNode）。v3 用に変えるのは、物の置き方（障害物 3 個・皿・荷物を、エピソードの配置どおりに置く）と、
 荷物の大きさ（2 × 2 × 4 cm）、つかむ・置く・運ぶ関節の列（v3 のエピソードの waypoints）。
 
@@ -18,9 +18,9 @@ v2（~/pai_obstacle_v2）の Gazebo の仕組みをそのまま使う：起動�
   記録
     5. 運ぶ間の荷物のずれ（指から見た位置の変化）、置いた位置の皿の中心からのずれ、傾き、エピソードの長さ
 
-v2 の run_episode_recorded.sh から実行する（撮影・接触の記録・判定・動画をまとめて行う）：
+gazebo/scripts/run_episode_recorded.sh から実行する（撮影・接触の記録・判定・動画をまとめて行う）：
 
-    cd ~/pai_obstacle_v2 && scripts/sim_start.sh
+    cd ~/pai_obstacle/gazebo && scripts/sim_start.sh
     scripts/run_episode_recorded.sh --script ~/pai_obstacle/scripts/gazebo_v3.py -- \\
         --episodes ~/pai_obstacle/data/dataset_L17_G15_W2/mlp_s42/test_episodes_raw.jsonl --indices 136,824,646
 """
@@ -37,7 +37,7 @@ import numpy as np
 import rclpy
 
 V3_DIR = Path(__file__).resolve().parent
-V2_DIR = Path.home() / "pai_obstacle_v2" / "scripts"
+V2_DIR = V3_DIR.parent / "gazebo" / "scripts"
 sys.path.insert(0, str(V3_DIR))
 sys.path.append(str(V2_DIR))
 import moveit_iface as mi  # noqa: E402  （v3）

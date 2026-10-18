@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  動画撮影用のカメラ（scripts/run_episode_recorded.sh --video で一時的に置く）。
+  シミュレーション時間で毎秒 FPS 枚の画像を SAVE_DIR に保存する。衝突形状は持たない。
+-->
+<sdf version="1.9">
+  <model name="video_camera">
+    <static>true</static>
+    <link name="link">
+      <sensor name="camera" type="camera">
+        <always_on>true</always_on>
+        <update_rate>FPS</update_rate>
+        <camera>
+          <horizontal_fov>HFOV</horizontal_fov>
+          <image>
+            <width>WIDTH</width>
+            <height>HEIGHT</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.02</near>
+            <far>20</far>
+          </clip>
+          <save enabled="true">
+            <path>SAVE_DIR</path>
+          </save>
+        </camera>
+      </sensor>
+    </link>
+  </model>
+</sdf>

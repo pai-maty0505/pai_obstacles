@@ -1,0 +1,366 @@
+diff --git a/so101_description/urdf/control/so101_ros2_control.urdf.xacro b/so101_description/urdf/control/so101_ros2_control.urdf.xacro
+index 24dd1b1..5f4543b 100644
+--- a/so101_description/urdf/control/so101_ros2_control.urdf.xacro
++++ b/so101_description/urdf/control/so101_ros2_control.urdf.xacro
+@@ -58,6 +58,16 @@
+                 <state_interface name="velocity"/>
+                 <state_interface name="effort"/>
+             </joint>
++            <!-- pai_obstacle_v2：左の指（gripper と左右対称に動かす） -->
++            <joint name="${prefix}gripper_left">
++                <command_interface name="position">
++                    <param name="min">-0.174533</param>
++                    <param name="max">1.74533</param>
++                </command_interface>
++                <state_interface name="position"/>
++                <state_interface name="velocity"/>
++                <state_interface name="effort"/>
++            </joint>
+ 
+         </ros2_control>
+     </xacro:macro>
+diff --git a/so101_description/urdf/so101_robot.urdf.xacro b/so101_description/urdf/so101_robot.urdf.xacro
+index 1cbf591..395a1b6 100644
+--- a/so101_description/urdf/so101_robot.urdf.xacro
++++ b/so101_description/urdf/so101_robot.urdf.xacro
+@@ -1,5 +1,36 @@
+ <?xml version="1.0"?>
+ <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
++  <!-- pai_obstacle_v2：指先まで覆う衝突形状と、内側の先端のゴムのパッド（指の座標系）。
++       指の座標系では、y の負の向きが指先、x の負の向き（side=1 のとき）が内側（物体側）。
++       寸法は STL メッシュを輪切りにして決めた（docs/figures/gripper_side.png） -->
++  <xacro:macro name="jaw_finger_collisions" params="side">
++    <collision name="finger">
++      <origin xyz="${side * -0.002} -0.050 0.020" rpy="0 0 0"/>
++      <geometry>
++        <box size="0.018 0.066 0.018"/>
++      </geometry>
++    </collision>
++    <!-- ゴムのパッド：5 × 34 × 30 mm（厚さ、指に沿った長さ、高さ）。運搬物（幅 3 × 奥行き 3 × 高さ 4 cm）の
++         挟む面を指に沿った向きに全部覆い、物体が少し傾いても指の本体に当たらないようにする。
++         物体を挟む角度（0.163 rad）で物体の面と平行になるよう、あらかじめ 0.165 rad 逆に傾けておく。
++         見た目も付けて、動画でパッドが物体に触れている様子が見えるようにする -->
++    <collision name="pad">
++      <origin xyz="${side * -0.0135} -0.066 0.020" rpy="0 0 ${side * -0.165}"/>
++      <geometry>
++        <box size="0.005 0.034 0.030"/>
++      </geometry>
++    </collision>
++    <visual name="pad">
++      <origin xyz="${side * -0.0135} -0.066 0.020" rpy="0 0 ${side * -0.165}"/>
++      <geometry>
++        <box size="0.005 0.034 0.030"/>
++      </geometry>
++      <material name="rubber_pad">
++        <color rgba="0.12 0.12 0.12 1.0"/>
++      </material>
++    </visual>
++  </xacro:macro>
++
+   <xacro:macro name="so101_robot" params="use_gazebo">
+       <!-- Materials -->
+       <material name="3d_printed">
+@@ -18,6 +49,18 @@
+           <origin xyz="0 0 0" rpy="0 0 0"/>
+         </joint>
+       </xacro:unless>
++
++      <!-- Gazebo では base_link をワールドに固定する（実機を机に固定するのと同じ）。
++           <gazebo> タグの中身は SDF のモデルにだけ入るので、MoveIt / RViz のモデルには影響しない。
++           （pai_obstacle_v2：patches/so101_ros2_local.patch） -->
++      <xacro:if value="${use_gazebo}">
++        <gazebo>
++          <joint name="world_fixed_joint" type="fixed">
++            <parent>world</parent>
++            <child>base_link</child>
++          </joint>
++        </gazebo>
++      </xacro:if>
+     
+       <!-- Link base -->
+       <link name="base_link">
+@@ -303,7 +346,7 @@
+         <visual>
+           <origin xyz="8.32667e-17 -0.000218214 0.000949706" rpy="-3.14159 -5.55112e-17 0"/>
+           <geometry>
+-            <mesh filename="file://$(find so101_description)/meshes/so_arm101/wrist_roll_follower_so101_v1.stl"/>
++            <mesh filename="file://$(find so101_description)/meshes/so_arm101/wrist_roll_follower_body_pai.stl"/>
+           </geometry>
+           <material name="3d_printed"/>
+         </visual>
+@@ -314,7 +357,7 @@
+               <box size="0.05 0.03 0.04"/>
+             </xacro:if>
+             <xacro:unless value="${use_gazebo}">
+-              <mesh filename="file://$(find so101_description)/meshes/so_arm101/wrist_roll_follower_so101_v1.stl"/>
++              <mesh filename="file://$(find so101_description)/meshes/so_arm101/wrist_roll_follower_body_pai.stl"/>
+             </xacro:unless>
+           </geometry>
+         </collision>
+@@ -363,6 +406,8 @@
+             </xacro:unless>
+           </geometry>
+         </collision>
++        <!-- pai_obstacle_v2：指先まで覆う衝突形状と、物体に触れてよいゴムのパッド -->
++        <xacro:jaw_finger_collisions side="1"/>
+       </link>
+     
+       <!-- Joint from gripper to moving_jaw_so101_v1 -->
+@@ -373,6 +418,55 @@
+         <axis xyz="0 0 1"/>
+         <limit effort="10" velocity="10" lower="-0.174533" upper="1.74533"/>
+       </joint>
++
++      <!-- pai_obstacle_v2：両側から挟むグリッパにする。
++           左の指は右の指（可動ジョウ）を gripper_link の x = 0 の面で左右反転したもの。
++           関節の位置の x と回転軸の向きを反転しているので、gripper と gripper_left に同じ角度を指令すると、
++           2 本の指が左右対称に開閉する（patches/so101_ros2_local.patch） -->
++      <link name="left_jaw_link">
++        <inertial>
++          <origin xyz="0.00157495 -0.0300244 0.0192755" rpy="0 0 0"/>
++          <mass value="0.012"/>
++          <inertia ixx="6.61427e-06" ixy="3.19807e-07" ixz="5.90717e-09" iyy="1.89032e-06" iyz="-1.09945e-07" izz="5.28738e-06"/>
++        </inertial>
++        <visual>
++          <origin xyz="0 0 0.0189" rpy="0 0 0"/>
++          <geometry>
++            <mesh filename="file://$(find so101_description)/meshes/so_arm101/moving_jaw_mirror_pai.stl"/>
++          </geometry>
++          <material name="3d_printed"/>
++        </visual>
++        <collision>
++          <origin xyz="0 0 0.0189" rpy="0 0 0"/>
++          <geometry>
++            <xacro:if value="${use_gazebo}">
++              <box size="0.025 0.035 0.045"/>
++            </xacro:if>
++            <xacro:unless value="${use_gazebo}">
++              <mesh filename="file://$(find so101_description)/meshes/so_arm101/moving_jaw_mirror_pai.stl"/>
++            </xacro:unless>
++          </geometry>
++        </collision>
++        <xacro:jaw_finger_collisions side="-1"/>
++      </link>
++
++      <joint name="gripper_left" type="revolute">
++        <origin xyz="-0.0202 0.0188 -0.0234" rpy="1.5708 -5.24284e-08 -1.41553e-15"/>
++        <parent link="gripper_link"/>
++        <child link="left_jaw_link"/>
++        <axis xyz="0 0 -1"/>
++        <limit effort="10" velocity="10" lower="-0.174533" upper="1.74533"/>
++      </joint>
++
++      <!-- 指のゴム：摩擦を大きくする（Gazebo のみ） -->
++      <gazebo reference="moving_jaw_so101_v1_link">
++        <mu1>1.5</mu1>
++        <mu2>1.5</mu2>
++      </gazebo>
++      <gazebo reference="left_jaw_link">
++        <mu1>1.5</mu1>
++        <mu2>1.5</mu2>
++      </gazebo>
+     
+       <transmission name="gripper_trans">
+         <type>transmission_interface/SimpleTransmission</type>
+diff --git a/so101_gazebo/launch/so101.gazebo.launch.py b/so101_gazebo/launch/so101.gazebo.launch.py
+index 3b1e050..74f4b96 100644
+--- a/so101_gazebo/launch/so101.gazebo.launch.py
++++ b/so101_gazebo/launch/so101.gazebo.launch.py
+@@ -11,7 +11,12 @@ from launch.actions import (
+     IncludeLaunchDescription,
+     TimerAction,
+ )
+-from launch.conditions import IfCondition, UnlessCondition
++from launch.conditions import (
++    IfCondition,
++    LaunchConfigurationEquals,
++    LaunchConfigurationNotEquals,
++    UnlessCondition,
++)
+ from launch.launch_description_sources import PythonLaunchDescriptionSource
+ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+ from launch_ros.actions import Node
+@@ -204,27 +209,43 @@ def generate_launch_description():
+         condition=IfCondition(use_camera)
+     )
+ 
++    spawn_pose_args = [
++        '-name', robot_name,
++        '-allow_renaming', 'true',
++        '-x', x,
++        '-y', y,
++        '-z', z,
++        '-R', roll,
++        '-P', pitch,
++        '-Y', yaw
++    ]
++
+     start_gazebo_ros_spawner_cmd = Node(
+         package='ros_gz_sim',
+         executable='create',
+         output='screen',
+-        arguments=[
+-            '-topic', '/robot_description',
+-            '-name', robot_name,
+-            '-allow_renaming', 'true',
+-            '-x', x,
+-            '-y', y,
+-            '-z', z,
+-            '-R', roll,
+-            '-P', pitch,
+-            '-Y', yaw
+-        ])
++        arguments=['-topic', '/robot_description'] + spawn_pose_args,
++        condition=LaunchConfigurationEquals('robot_sdf_file', ''))
++
++    # pai_obstacle_v2：robot_sdf_file を指定したときは、その SDF からロボットを生成する
++    # （メッシュの衝突形状に凸分解の指定を加えた SDF を使うため。patches/so101_ros2_local.patch）
++    start_gazebo_sdf_spawner_cmd = Node(
++        package='ros_gz_sim',
++        executable='create',
++        output='screen',
++        arguments=['-file', LaunchConfiguration('robot_sdf_file')] + spawn_pose_args,
++        condition=LaunchConfigurationNotEquals('robot_sdf_file', ''))
+ 
+     delayed_spawn_cmd = TimerAction(
+         period=spawn_delay,
+-        actions=[start_gazebo_ros_spawner_cmd]
++        actions=[start_gazebo_ros_spawner_cmd, start_gazebo_sdf_spawner_cmd]
+     )
+ 
++    declare_robot_sdf_file_cmd = DeclareLaunchArgument(
++        name='robot_sdf_file',
++        default_value='',
++        description='Spawn the robot from this SDF file instead of /robot_description (empty: use the topic)')
++
+     ld = LaunchDescription()
+ 
+     ld.add_action(declare_robot_name_cmd)
+@@ -244,6 +265,7 @@ def generate_launch_description():
+     ld.add_action(declare_pitch_cmd)
+     ld.add_action(declare_yaw_cmd)
+     ld.add_action(declare_spawn_delay_cmd)
++    ld.add_action(declare_robot_sdf_file_cmd)
+     ld.add_action(declare_controller_load_delay_cmd)
+ 
+     ld.add_action(robot_state_publisher_cmd)
+diff --git a/so101_moveit_config/config/so101/initial_positions.yaml b/so101_moveit_config/config/so101/initial_positions.yaml
+index 385884d..4bc4f4a 100644
+--- a/so101_moveit_config/config/so101/initial_positions.yaml
++++ b/so101_moveit_config/config/so101/initial_positions.yaml
+@@ -6,3 +6,4 @@ initial_positions:
+   wrist_flex: 0.0
+   wrist_roll: 0.0
+   gripper: 1.5
++  gripper_left: 1.5
+diff --git a/so101_moveit_config/config/so101/joint_limits.yaml b/so101_moveit_config/config/so101/joint_limits.yaml
+index 96eeb4d..2adc985 100644
+--- a/so101_moveit_config/config/so101/joint_limits.yaml
++++ b/so101_moveit_config/config/so101/joint_limits.yaml
+@@ -68,3 +68,14 @@ joint_limits:
+     max_jerk: 300.0
+     has_effort_limits: true
+     max_effort: 10.0
++  gripper_left:
++    has_velocity_limits: true
++    max_velocity: 2.0
++    has_acceleration_limits: true
++    max_acceleration: 5.0
++    has_deceleration_limits: true
++    max_deceleration: -5.0
++    has_jerk_limits: false
++    max_jerk: 300.0
++    has_effort_limits: true
++    max_effort: 10.0
+diff --git a/so101_moveit_config/config/so101/moveit_controllers.yaml b/so101_moveit_config/config/so101/moveit_controllers.yaml
+index 7d99428..59bbb02 100644
+--- a/so101_moveit_config/config/so101/moveit_controllers.yaml
++++ b/so101_moveit_config/config/so101/moveit_controllers.yaml
+@@ -23,3 +23,4 @@ moveit_simple_controller_manager:
+     default: true
+     joints:
+       - gripper
++      - gripper_left
+\ No newline at end of file
+diff --git a/so101_moveit_config/config/so101/ros2_controllers.yaml b/so101_moveit_config/config/so101/ros2_controllers.yaml
+index 0743f10..6692399 100644
+--- a/so101_moveit_config/config/so101/ros2_controllers.yaml
++++ b/so101_moveit_config/config/so101/ros2_controllers.yaml
+@@ -54,6 +54,7 @@ gripper_controller:
+   ros__parameters:
+     joints:
+       - gripper
++      - gripper_left
+     command_interfaces:
+       - position
+     state_interfaces:
+diff --git a/so101_moveit_config/config/so101/so101.srdf b/so101_moveit_config/config/so101/so101.srdf
+index 027de59..e1fd2ba 100644
+--- a/so101_moveit_config/config/so101/so101.srdf
++++ b/so101_moveit_config/config/so101/so101.srdf
+@@ -12,6 +12,7 @@
+ 
+     <group name="gripper">
+         <joint name="gripper"/>
++        <joint name="gripper_left"/>
+     </group>
+ 
+     <group name="arm_with_gripper">
+@@ -39,14 +40,17 @@
+ 
+     <group_state name="open" group="gripper">
+         <joint name="gripper" value="1.5"/>
++        <joint name="gripper_left" value="1.5"/>
+     </group_state>
+ 
+     <group_state name="half_closed" group="gripper">
+         <joint name="gripper" value="0.75"/>
++        <joint name="gripper_left" value="0.75"/>
+     </group_state>
+ 
+     <group_state name="closed" group="gripper">
+         <joint name="gripper" value="-0.17"/>
++        <joint name="gripper_left" value="-0.17"/>
+     </group_state>
+ 
+     <group_state name="home" group="arm_with_gripper">
+@@ -56,6 +60,7 @@
+         <joint name="wrist_flex" value="0"/>
+         <joint name="wrist_roll" value="0"/>
+         <joint name="gripper" value="1.5"/>
++        <joint name="gripper_left" value="1.5"/>
+     </group_state>
+ 
+     <group_state name="ready" group="arm_with_gripper">
+@@ -65,6 +70,7 @@
+         <joint name="wrist_flex" value="1.5708"/>
+         <joint name="wrist_roll" value="0"/>
+         <joint name="gripper" value="1.5"/>
++        <joint name="gripper_left" value="1.5"/>
+     </group_state>
+ 
+     <!-- Adjacent links -->
+@@ -82,6 +88,10 @@
+     <disable_collisions link1="base_link" link2="wrist_link" reason="Never"/>
+     <disable_collisions link1="base_link" link2="gripper_link" reason="Never"/>
+     <disable_collisions link1="base_link" link2="moving_jaw_so101_v1_link" reason="Never"/>
++    <!-- pai_obstacle_v2：左の指（可動ジョウと同じ組を無効にする。左右の指どうしは、閉じきると当たるので無効） -->
++    <disable_collisions link1="gripper_link" link2="left_jaw_link" reason="Adjacent"/>
++    <disable_collisions link1="base_link" link2="left_jaw_link" reason="Never"/>
++    <disable_collisions link1="left_jaw_link" link2="moving_jaw_so101_v1_link" reason="Never"/>
+     <disable_collisions link1="shoulder_link" link2="lower_arm_link" reason="Never"/>
+     <disable_collisions link1="shoulder_link" link2="wrist_link" reason="Never"/>
+     <disable_collisions link1="shoulder_link" link2="gripper_link" reason="Never"/>
+diff --git a/so101_moveit_config/package.xml b/so101_moveit_config/package.xml
+index 6a0c60e..aeda476 100644
+--- a/so101_moveit_config/package.xml
++++ b/so101_moveit_config/package.xml
+@@ -14,7 +14,7 @@
+   <exec_depend>moveit_kinematics</exec_depend>
+   <exec_depend>moveit_planners_ompl</exec_depend>
+   <exec_depend>moveit_planners_stomp</exec_depend>
+-  <exec_depend>moveit_planners_pilz_industrial_motion_planner</exec_depend>
++  <exec_depend>pilz_industrial_motion_planner</exec_depend>
+   <exec_depend>moveit_ros_visualization</exec_depend>
+   <exec_depend>moveit_configs_utils</exec_depend>
+   <exec_depend>moveit_simple_controller_manager</exec_depend>

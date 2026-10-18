@@ -227,10 +227,20 @@ v2 の両側から挟む改造版（1.8 節）を使う。標準の SO-101（可
 |---|---|
 | OS・ROS 2 | Ubuntu 24.04、ROS 2 Jazzy、Gazebo Harmonic、MoveIt 2、ros2_control（1.8 節） |
 | SO-101 | `~/so101_ws`（1.8 節のパッチを当てたもの） |
-| Gazebo の仕組み | [pai_obstacle_v2](https://github.com/pai-claude-maty0505/pai_obstacle_v2) を `~/pai_obstacle_v2` に置く。起動（`scripts/sim_start.sh`）、撮影・接触の記録・判定（`scripts/run_episode_recorded.sh`）、字幕付きの動画、アームとグリッパの動かし方をそのまま使う |
+| Gazebo の仕組み | v2 のものを [gazebo/](gazebo) に入れてある。起動（`gazebo/scripts/sim_start.sh`）、撮影・接触の記録・判定（`gazebo/scripts/run_episode_recorded.sh`）、字幕付きの動画、アームとグリッパの動かし方をそのまま使う |
 | Python | ROS 2 を使うスクリプトはシステムの Python（`/usr/bin/python3`、numpy・scipy）。学習（`train_mlp.py`）だけは PyTorch の入った Python（例：`~/miniconda3/bin/python`、PyTorch 2.5.1 + CUDA 12.1） |
 
-環境の作り方は 7 章。以下、このリポジトリを `~/pai_obstacle` に置いたものとする。ROS 2 を使うコマンドは、次を読み込んだ端末で実行する。
+環境の作り方は 7 章。以下、このリポジトリを `~/pai_obstacle` に置いたものとする。
+
+| ディレクトリ | 内容 |
+|---|---|
+| `scripts/` | お手本の生成・学習・確かめ・Gazebo での実行のスクリプト |
+| `data/` | 姿勢（`poses.json`）。お手本・学習の結果もここに出る |
+| `sim/models/` | 三角錐のメッシュ |
+| `gazebo/` | Gazebo の起動・撮影・判定の仕組み（`scripts/`・`sim/`・`data/`）。記録は `gazebo/logs/` に出る |
+| `patches/` | SO-101 の ROS 2 ワークスペースに当てるパッチ（7.4 節） |
+
+ROS 2 を使うコマンドは、次を読み込んだ端末で実行する。
 
 ```bash
 source /opt/ros/jazzy/setup.bash && source ~/so101_ws/install/setup.bash
@@ -241,13 +251,13 @@ source /opt/ros/jazzy/setup.bash && source ~/so101_ws/install/setup.bash
 Gazebo を起動する。
 
 ```bash
-cd ~/pai_obstacle_v2 && scripts/sim_start.sh
+cd ~/pai_obstacle/gazebo && scripts/sim_start.sh
 ```
 
 別の端末で、6 章で作った推論軌道のエピソードを、番号を指定して続けて実行する（撮影・接触の記録・判定・動画をまとめて行う）。
 
 ```bash
-cd ~/pai_obstacle_v2 && scripts/run_episode_recorded.sh --script ~/pai_obstacle/scripts/gazebo_v3.py -- --episodes ~/pai_obstacle/data/dataset_L17_G15_W2/mlp_s42/test_episodes_raw.jsonl --indices 136,824,646
+cd ~/pai_obstacle/gazebo && scripts/run_episode_recorded.sh --script ~/pai_obstacle/scripts/gazebo_v3.py -- --episodes ~/pai_obstacle/data/dataset_L17_G15_W2/mlp_s42/test_episodes_raw.jsonl --indices 136,824,646
 ```
 
 | 引数（`--` の後ろ） | 内容 |
@@ -265,7 +275,7 @@ cd ~/pai_obstacle_v2 && scripts/run_episode_recorded.sh --script ~/pai_obstacle/
 
 成功の条件は、運ぶ間のずれ・置いた位置のずれがともに 10 mm 未満、傾きが 5° 未満で、不許可の接触・めり込みがないこと（荷物に触れてよいのは、左右のパッド・つかむ前の床・皿だけ）。
 
-記録は `~/pai_obstacle_v2/logs/runs/<日時>_<引数>/` に保存される（`summary.txt`：判定のまとめ、`run.log`、`contacts.txt`：接触の記録、`video.mp4` とエピソードごとに切り出した動画）。
+記録は `~/pai_obstacle/gazebo/logs/runs/<日時>_<引数>/` に保存される（`summary.txt`：判定のまとめ、`run.log`、`contacts.txt`：接触の記録、`video.mp4` とエピソードごとに切り出した動画）。
 
 ---
 
@@ -377,7 +387,7 @@ cd ~/pai_obstacle && /usr/bin/python3 scripts/validate_mlp.py --version dataset_
 | OS | Ubuntu 24.04 |
 | ROS 2 | Jazzy（Gazebo Harmonic は `ros-jazzy-ros-gz` で入る） |
 | GPU | 学習に使う（RTX 3060 12 GB で確認）。なくても CPU で学習できるが遅い |
-| 置き場所 | このリポジトリ `~/pai_obstacle`、Gazebo の仕組み `~/pai_obstacle_v2`、SO-101 のワークスペース `~/so101_ws` |
+| 置き場所 | このリポジトリ `~/pai_obstacle`、SO-101 のワークスペース `~/so101_ws` |
 
 ### 7.2 ROS 2 Jazzy と使うパッケージ
 
@@ -389,28 +399,24 @@ sudo apt update && sudo apt install -y ros-jazzy-desktop ros-jazzy-moveit ros-ja
 
 `python3-numpy`・`python3-scipy` は、ROS 2 を使うスクリプト（システムの Python）が使う。`ffmpeg` は Gazebo の動画を作るのに使う。
 
-### 7.3 このリポジトリと Gazebo の仕組み
+### 7.3 このリポジトリ
 
 ```bash
 git clone https://github.com/pai-maty0505/pai_obstacles.git ~/pai_obstacle
 ```
 
-```bash
-git clone https://github.com/pai-claude-maty0505/pai_obstacle_v2.git ~/pai_obstacle_v2
-```
-
-`~/pai_obstacle_v2` は、Gazebo の起動・撮影・判定（5 章）と、SO-101 のパッチ・グリッパの部品（7.4 節）に使う。
+Gazebo の起動・撮影・判定の仕組み（5 章）と、SO-101 のパッチ・グリッパの部品を作るスクリプト（7.4 節）も、このリポジトリに入っている。
 
 ### 7.4 SO-101 の ROS 2 ワークスペース
 
-[adoodevv/so101_ros2](https://github.com/adoodevv/so101_ros2) のコミット `0305e03` を `~/so101_ws/src/so101_ros2` に置き、`~/pai_obstacle_v2/patches/so101_ros2_local.patch` を当ててビルドする。パッチの内容は、Jazzy のパッケージ名に合わせて `pilz_industrial_motion_planner` に変えること、Gazebo のモデルだけ `base_link` をワールドに固定すること、グリッパを両側から挟む形に改造すること（1.8 節）。
+[adoodevv/so101_ros2](https://github.com/adoodevv/so101_ros2) のコミット `0305e03` を `~/so101_ws/src/so101_ros2` に置き、[patches/so101_ros2_local.patch](patches/so101_ros2_local.patch) を当ててビルドする。パッチの内容は、Jazzy のパッケージ名に合わせて `pilz_industrial_motion_planner` に変えること、Gazebo のモデルだけ `base_link` をワールドに固定すること、グリッパを両側から挟む形に改造すること（1.8 節）。
 
 ```bash
 mkdir -p ~/so101_ws/src && cd ~/so101_ws/src && git clone https://github.com/adoodevv/so101_ros2.git
 ```
 
 ```bash
-cd ~/so101_ws/src/so101_ros2 && git checkout 0305e03 && git apply ~/pai_obstacle_v2/patches/so101_ros2_local.patch
+cd ~/so101_ws/src/so101_ros2 && git checkout 0305e03 && git apply ~/pai_obstacle/patches/so101_ros2_local.patch
 ```
 
 ```bash
@@ -420,7 +426,7 @@ source /opt/ros/jazzy/setup.bash && cd ~/so101_ws && colcon build
 パッチを当てた後、左の指と手首の部品のメッシュを作ってから、もう一度ビルドする。
 
 ```bash
-python3 ~/pai_obstacle_v2/scripts/make_gripper_meshes.py
+python3 ~/pai_obstacle/scripts/make_gripper_meshes.py
 ```
 
 ```bash
@@ -444,17 +450,17 @@ cd ~/so101_ws && colcon build --symlink-install --packages-select so101_descript
 Gazebo・MoveIt 2・RViz が起動して準備が整うかを確かめる（初回の起動は約 30 秒）。物理エンジンは bullet-featherstone、ロボットの衝突形状は凸分解したもの（起動時に作る）を使う。
 
 ```bash
-cd ~/pai_obstacle_v2 && scripts/sim_start.sh
+cd ~/pai_obstacle/gazebo && scripts/sim_start.sh
 ```
 
 ```bash
-cd ~/pai_obstacle_v2 && scripts/sim_check.sh
+cd ~/pai_obstacle/gazebo && scripts/sim_check.sh
 ```
 
 停止：
 
 ```bash
-cd ~/pai_obstacle_v2 && scripts/sim_stop.sh
+cd ~/pai_obstacle/gazebo && scripts/sim_stop.sh
 ```
 
 起動時に次のエラーが出るが、使っていない機能のもので害はない：`No 3D sensor plugin(s) defined for octomap updates`、`ExecuteTaskSolutionCapability ... does not exist`、`Action server: /recognize_objects not available`。
