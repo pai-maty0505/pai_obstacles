@@ -1,0 +1,4 @@
+logs/
+data/*/parts/
+__pycache__/
+*.pyc
